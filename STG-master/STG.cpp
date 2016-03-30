@@ -1,6 +1,6 @@
 #include "STG.h"
 
-STG::STG(Sound* sonido,RosalilaGraphics* painter,Receiver* receiver,Player*player,Enemy*enemy,Stage*stage)
+STG::STG(Sound* sonido,RosalilaGraphics* painter,Receiver* receiver,Player*player,Enemy*enemy,Stage*stage,string game_mode)
 {
     this->sonido=sonido;
     this->painter=painter;
@@ -8,9 +8,11 @@ STG::STG(Sound* sonido,RosalilaGraphics* painter,Receiver* receiver,Player*playe
     this->player=player;
     this->enemy=enemy;
     this->stage=stage;
-    painter->camera_x=0;
+    this->game_mode=game_mode;
+
     painter->camera_y=0;
     iteration=0;
+    boss_fury_level=0;
 
     //XML Initializations
     string config_directory = assets_directory+"config.xml";
@@ -31,6 +33,11 @@ STG::STG(Sound* sonido,RosalilaGraphics* painter,Receiver* receiver,Player*playe
     int you_loose_animation_velocity=atoi(you_loose_node->ToElement()->Attribute("animation_velocity"));
     you_loose=Animation(you_loose_x,you_loose_y,you_loose_animation_velocity,painter);
 
+    if(you_loose_node->ToElement()->Attribute("sound"))
+    {
+        sonido->addSound("you lose",assets_directory+you_loose_node->ToElement()->Attribute("sound"));
+    }
+
     for(TiXmlNode* sprites_node=you_loose_node->FirstChild("sprite");
             sprites_node!=NULL;
             sprites_node=sprites_node->NextSibling("sprite"))
@@ -47,6 +54,11 @@ STG::STG(Sound* sonido,RosalilaGraphics* painter,Receiver* receiver,Player*playe
     int you_win_animation_velocity=atoi(you_win_node->ToElement()->Attribute("animation_velocity"));
     you_win=Animation(you_win_x,you_win_y,you_win_animation_velocity,painter);
 
+    if(you_win_node->ToElement()->Attribute("sound"))
+    {
+        sonido->addSound("you win",assets_directory+you_win_node->ToElement()->Attribute("sound"));
+    }
+
     for(TiXmlNode* sprites_node=you_win_node->FirstChild("sprite");
             sprites_node!=NULL;
             sprites_node=sprites_node->NextSibling("sprite"))
@@ -55,20 +67,37 @@ STG::STG(Sound* sonido,RosalilaGraphics* painter,Receiver* receiver,Player*playe
         you_win.addImage(painter->getTexture(assets_directory+path));
     }
 
-    stage->playMusic();
+    if(game_mode=="Stage select")
+    {
+        stageSelectModeInit();
+    }
 
     mainLoop();
+}
+
+void STG::stageSelectModeInit()
+{
+    stage->playMusic();
+    painter->camera_x=0;
 }
 
 void STG::mainLoop()
 {
     bool end_key_up_keyboard=false;
     bool end_key_up_joystick=false;
+    string music_path_temp = assets_directory+"stages/"+stage->getName()+"/music.ogg";
+    Mix_Music *music=Mix_LoadMUS(music_path_temp.c_str());
     for (;;)
     {
         if(receiver->isKeyDown(SDLK_ESCAPE))
         {
+            exit(0);
             break;
+        }
+
+        if(!Mix_PlayingMusic())
+        {
+            Mix_PlayMusic(music,0);
         }
 
         render();
@@ -80,7 +109,7 @@ void STG::mainLoop()
                 break;
             if(receiver->isKeyPressed(SDLK_z) && end_key_up_keyboard)
                 break;
-            if(receiver->isJoyPressed(0,0) && end_key_up_joystick)
+            if(receiver->isJoyDown(0,0) && end_key_up_joystick)
                 break;
             if(!receiver->isKeyPressed(SDLK_z))
                 end_key_up_keyboard=true;
@@ -94,42 +123,146 @@ void STG::mainLoop()
 
 void STG::logic()
 {
-    if(receiver->isKeyPressed(SDLK_1))
-    {
-        player->setType("1");
+    if(receiver->isKeyDown(SDLK_a)){
+        player->setHP(player->getHP() - player->getHP());
     }
-    if(receiver->isKeyPressed(SDLK_2))
+    float distance_x=enemy->x - player->x;
+    float distance_y=enemy->y - player->y;
+    float distance=sqrt(distance_x*distance_x+distance_y*distance_y);
+    float damage_level=6-distance/250.0;
+
+    for (std::list<Pattern*>::iterator pattern = enemy->getActivePatterns()->begin(); pattern != enemy->getActivePatterns()->end(); pattern++)
     {
-        player->setType("2");
+        Pattern*p=(Pattern*)*pattern;
+        if(!p->isHit())
+        {
+            for(int i=0;i<(int)p->getBullet()->getHitboxes().size();i++)
+            {
+                Hitbox h=p->getBullet()->getHitboxes()[i]->getPlacedHitbox(p->getX(),p->getY(),p->getBulletAngle());
+                if(p->collides_opponent && player->collides(h,0,0,0))
+                {
+                    p->hit();
+                    if(player->isParrying())
+                    {
+
+                        if(receiver->isKeyDown(SDL_SCANCODE_RIGHT)
+                           || receiver->isJoyDown(-6,0))
+                        {
+                            player->setX(player->getX()+150);
+                        }
+                        if(receiver->isKeyDown(SDL_SCANCODE_LEFT)
+                           || receiver->isJoyDown(-4,0))
+                        {
+                            player->setX(player->getX()-150);
+                        }
+                        if(receiver->isKeyDown(SDL_SCANCODE_UP)
+                           || receiver->isJoyDown(-2,0))
+                        {
+                            player->setY(player->getY()-150);
+                        }
+                        if(receiver->isKeyDown(SDL_SCANCODE_DOWN)
+                           || receiver->isJoyDown(-8,0))
+                        {
+                            player->setY(player->getY()+150);
+                        }
+
+
+                        p->velocity=10;
+
+                        if(p->x>player->getX())
+                        {
+                            p->angle=135;
+                        }else
+                        {
+                            p->angle=-135;
+                        }
+                    }else
+                    {
+                        player->hit(p->getDamage());
+                        painter->shakeScreen(30,10);
+                        if(this->sonido->soundExists(player->getName()+".hit"))
+                            this->sonido->playSound(player->getName()+".hit");
+                        if(player->getHP()==0)
+                        {
+                            sonido->playSound("you lose");
+                        }
+                    }
+                }
+            }
+        }
     }
-    if(receiver->isKeyPressed(SDLK_3))
+
+    for (std::list<Pattern*>::iterator pattern = player->getActivePatterns()->begin(); pattern != player->getActivePatterns()->end(); pattern++)
     {
-        player->setType("3");
+        Pattern*p=(Pattern*)*pattern;
+        if(!p->isHit())
+        {
+            for(int i=0;i<(int)p->getBullet()->getHitboxes().size();i++)
+            {
+                Hitbox h=p->getBullet()->getHitboxes()[i]->getPlacedHitbox(p->getX(),p->getY(),p->getBulletAngle());
+                if(p->collides_opponent && enemy->collides(h,0,0,0))
+                {
+                    p->hit();
+                    enemy->hit(p->getDamage()+damage_level);
+                    enemy->shakeScreen(p->getDamage()+damage_level*3,p->getDamage()+damage_level*2);
+                    if(this->sonido->soundExists(enemy->getName()+".hit"))
+                        this->sonido->playSound(enemy->getName()+".hit");
+                    if(enemy->getHP()==0)
+                    {
+                        painter->shakeScreen(50,20);
+                        sonido->playSound("you win");
+                        enemy->deleteActivePatterns();
+                    }
+                }
+            }
+        }
     }
-    if(receiver->isKeyPressed(SDLK_4))
+
+    //BulletxBullet Collision
+    for (std::list<Pattern*>::iterator enemy_pattern_iterator = enemy->getActivePatterns()->begin(); enemy_pattern_iterator != enemy->getActivePatterns()->end(); enemy_pattern_iterator++)
     {
-        player->setType("4");
+        Pattern*enemy_pattern=(Pattern*)*enemy_pattern_iterator;
+        if(!enemy_pattern->isHit())
+        {
+            for (std::list<Pattern*>::iterator player_pattern_iterator = player->getActivePatterns()->begin(); player_pattern_iterator != player->getActivePatterns()->end(); player_pattern_iterator++)
+            {
+                Pattern*player_pattern=(Pattern*)*player_pattern_iterator;
+                if(player_pattern->collides_bullets||enemy_pattern->collides_bullets)
+                {
+                    if(!player_pattern->isHit())
+                    {
+                        vector<Hitbox*>enemy_hitboxes=enemy_pattern->getBullet()->getHitboxes();
+                        for(int i=0;i<(int)enemy_hitboxes.size();i++)
+                        {
+                            Hitbox enemy_hitbox=enemy_hitboxes[i]->getPlacedHitbox(enemy_pattern->getX(),enemy_pattern->getY(),enemy_pattern->getBulletAngle());
+                            vector<Hitbox*>player_hitboxes=player_pattern->getBullet()->getHitboxes();
+                            for(int j=0;j<(int)player_hitboxes.size();j++)
+                            {
+                                Hitbox player_hitbox=player_hitboxes[j]->getPlacedHitbox(player_pattern->getX(),player_pattern->getY(),player_pattern->getBulletAngle());
+                                if(enemy_hitbox.collides(player_hitbox))
+                                {
+                                    enemy_pattern->hit();
+                                    player_pattern->hit();
+                                }
+                            }
+
+                        }
+                    }
+                }
+            }
+        }
     }
-    if(receiver->isKeyPressed(SDLK_5))
-    {
-        player->setType("5");
-    }
-    if(receiver->isKeyPressed(SDLK_6))
-    {
-        player->setType("6");
-    }
-    if(receiver->isKeyPressed(SDLK_7))
-    {
-        player->setType("7");
-    }
-    if(receiver->isKeyPressed(SDLK_8))
-    {
-        player->setType("8");
-    }
-    if(receiver->isKeyPressed(SDLK_9))
-    {
-        player->setType("9");
-    }
+
+//    if(receiver->isKeyPressed(SDLK_t))
+//    {
+//        //boss_fury_level+=1;
+//        //player->deleteActivePatterns();
+//        //enemy->deleteActivePatterns();
+//    }
+//    if(receiver->isKeyPressed(SDLK_1))
+//    {
+//        player->setType("1");
+//    }
 
     int stage_displacement = stage->getVelocity();
     if(isSlowActive())
@@ -138,6 +271,11 @@ void STG::logic()
     player->logic(stage_displacement);
     player->setX(player->getX()+stage_displacement);
     enemy->logic(stage_displacement,stage->getName(),iteration,username);
+    for(int i=0;i<boss_fury_level;i++)
+    {
+        iteration++;
+        enemy->logic(0,stage->getName(),iteration,username);
+    }
     //enemy->setX(enemy->getX()+stage_displacement);
     stage->logic();
 
@@ -152,54 +290,22 @@ void STG::logic()
 void STG::render()
 {
     stage->dibujarBack();
-    player->render();
-    enemy->render();
+    player->bottomRender();
+    enemy->bottomRender();
+    player->topRender();
+    enemy->topRender();
 
     stage->render();
     stage->dibujarFront();
-
-    for (std::list<Pattern*>::iterator pattern = enemy->getActivePatterns()->begin(); pattern != enemy->getActivePatterns()->end(); pattern++)
-    {
-        Pattern*p=(Pattern*)*pattern;
-        if(!p->isHit())
-        {
-            for(int i=0;i<(int)p->getBullet()->getHitboxes().size();i++)
-            {
-                p->getBullet()->getHitboxes()[i];
-                Hitbox h=p->getBullet()->getHitboxes()[i]->getPlacedHitbox(p->getX(),p->getY(),p->getBulletAngle());
-                if(player->collides(h,0,0,0))
-                {
-                    p->hit();
-                    player->hit(p->getDamage());
-                }
-            }
-        }
-    }
-
-    for (std::list<Pattern*>::iterator pattern = player->getActivePatterns()->begin(); pattern != player->getActivePatterns()->end(); pattern++)
-    {
-        Pattern*p=(Pattern*)*pattern;
-        if(!p->isHit())
-        {
-            for(int i=0;i<(int)p->getBullet()->getHitboxes().size();i++)
-            {
-                p->getBullet()->getHitboxes()[i];
-                Hitbox h=p->getBullet()->getHitboxes()[i]->getPlacedHitbox(p->getX(),p->getY(),p->getBulletAngle());
-                if(enemy->collides(h,0,0,0))
-                {
-                    p->hit();
-                    enemy->hit(p->getDamage());
-                }
-            }
-        }
-    }
 
     if(enemy->getHP()==0)
         you_win.render();
     if(player->getHP()==0)
         you_loose.render();
 
-    painter->drawText("Time: "+toString(iteration),0,65);
+//    painter->drawText("Time: "+toString(iteration),25,70);
+//    painter->drawText(enemy->getName(),25,110);
+//    painter->drawText("Damage level: "+toString(damage_level),25,170);
 
 
     painter->updateScreen();
@@ -266,4 +372,14 @@ void STG::checkCharacterOutOfBounds()
         player->setY(stage->getBoundY1());
     if(player->getY()>stage->getBoundY2())
         player->setY(stage->getBoundY2());
+}
+
+bool STG::playerWon()
+{
+    return enemy->getHP()==0;
+}
+
+bool STG::enemyWon()
+{
+    return player->getHP()==0;
 }

@@ -52,7 +52,8 @@ void Stage::drawLayer(Layer* layer)
             layer->depth_effect_y,
             Color(255,255,255,255),
             0,0,
-            false);
+            false,
+            FlatShadow());
     }
 
     if(layer->depth_effect_x>0)
@@ -63,9 +64,9 @@ void Stage::drawLayer(Layer* layer)
         }
     }else if(layer->depth_effect_x<0)
     {
-        if(painter->camera_x-layer->depth_effect_x>size_x+layer->alignment_x)
+        if(painter->camera_x*-layer->depth_effect_x>size_x+layer->separation_x+layer->alignment_x)
         {
-            layer->alignment_x+=size_x;
+            layer->alignment_x+=size_x+layer->separation_x;
         }
     }
 
@@ -100,7 +101,8 @@ void Stage::dibujarFront()
             0,0,
             Color(255,255,255,255),
             0,0,
-            false);
+            false,
+            FlatShadow());
         ((Dialogue*)*dialogue)->render(this->dialogue_x+this->dialogue_padding_x,this->dialogue_y+this->dialogue_padding_y);
     }
 }
@@ -355,6 +357,12 @@ string Stage::getName()
 {
     return name;
 }
+
+void Stage::setName(string name)
+{
+    this->name=name;
+}
+
 void Stage::setVelocity(int velocity)
 {
     this->velocity=velocity;
@@ -395,4 +403,9 @@ void Stage::logic()
 void Stage::playMusic()
 {
     sonido->playMusic(this->music_path);
+}
+
+string Stage::getMusicPath()
+{
+    return music_path;
 }

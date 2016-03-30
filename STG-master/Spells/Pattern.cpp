@@ -1,8 +1,8 @@
 #include "Pattern.h"
 
 
-Pattern::Pattern(Sound* sonido,RosalilaGraphics* painter,Receiver* receiver,int velocity,int max_velocity,int acceleration,int a_frequency,float angle,int angle_change,int stop_ac_at,int ac_frequency,int animation_velocity,
-                 Bullet* bullet,int offset_x,int offset_y,int startup,int cooldown,int duration,int random_angle,bool aim_player,int bullet_rotation,int br_change,int independent_br,bool freeze, bool homing, std::map<int, vector<Modifier*>* >*modifiers,std::map<std::string,Bullet*> *bullets)
+Pattern::Pattern(Sound* sonido,RosalilaGraphics* painter,Receiver* receiver,int velocity,int max_velocity,int acceleration,int a_frequency,float angle,int angle_change,int stop_ac_at,int ac_frequency,int animation_velocity, double auto_scale,
+                 Bullet* bullet,int offset_x,int offset_y,int startup,int cooldown,int duration,int random_angle,bool aim_player,int bullet_rotation,int br_change,int independent_br,bool freeze, bool homing, bool collides_bullets, bool collides_opponent, bool undestructable, std::map<int, vector<Modifier*>* >*modifiers,std::map<std::string,Bullet*> *bullets)
 {
     this->sonido=sonido;
     this->painter=painter;
@@ -27,10 +27,12 @@ Pattern::Pattern(Sound* sonido,RosalilaGraphics* painter,Receiver* receiver,int 
     this->x=0;
     this->y=0;
     this->animation_velocity=animation_velocity;
+    this->auto_scale=auto_scale;
     this->bullet=bullet;
     this->random_angle=random_angle;
     this->aim_player=aim_player;
     this->homing = homing;
+    this->frame=0;
 
     //Sprites animation
     this->animation_iteration=0;
@@ -52,6 +54,11 @@ Pattern::Pattern(Sound* sonido,RosalilaGraphics* painter,Receiver* receiver,int 
     //Modifiers
     this->modifiers=modifiers;
     this->bullets=bullets;
+
+    //Collision
+    this->collides_bullets=collides_bullets;
+    this->collides_opponent=collides_opponent;
+    this->undestructable=undestructable;
 }
 
 Pattern::Pattern(Pattern*pattern,int x,int y)
@@ -74,11 +81,13 @@ Pattern::Pattern(Pattern*pattern,int x,int y)
     this->x=x+pattern->offset_x;
     this->y=y-pattern->offset_y;
     this->animation_velocity=pattern->animation_velocity;
+    this->auto_scale=pattern->auto_scale;
     this->bullet=pattern->bullet;
     this->random_angle=pattern->random_angle;
     this->aim_player=pattern->aim_player;
     this->freeze=pattern->freeze;
     this->homing = pattern->homing;
+    this->frame=0;
 
     this->iteration=0;
     this->duration=pattern->duration;
@@ -97,6 +106,14 @@ Pattern::Pattern(Pattern*pattern,int x,int y)
     //Modifiers
     this->modifiers=pattern->modifiers;
     this->bullets=pattern->bullets;
+
+    //Collision
+    this->collides_bullets=pattern->collides_bullets;
+    this->collides_opponent=pattern->collides_opponent;
+    this->undestructable=pattern->undestructable;
+
+    //Keeping the parent for reasons
+    this->pattern=pattern;
 }
 
 bool Pattern::isReady()
@@ -118,6 +135,7 @@ void Pattern::setState(std::string state)
 
 void Pattern::updateStateShouting()
 {
+    //cout<<state<<endl;
     if(getIterateSlowdownFlag())
     {
         if(state=="startup")
@@ -149,8 +167,9 @@ void Pattern::updateStateShouting()
 void Pattern::updateStateNotShouting()
 {
     current_startup=0;
-    current_cooldown=0;
-    state="startup";
+    //current_cooldown=0;
+    current_cooldown++;
+    //state="startup";
 }
 
 
@@ -197,7 +216,7 @@ void Pattern::logic(int stage_speed)
             velocity=max_velocity;
     }
 
-    if(current_stop_ac_at<stop_ac_at&& stop_ac_at>0)
+    if(current_stop_ac_at<stop_ac_at || stop_ac_at==-1)
     {
         if(getIterateSlowdownFlag())
             current_ac_frequency++;
@@ -211,6 +230,8 @@ void Pattern::logic(int stage_speed)
     bullet_rotation += br_change;
 
     modifiersControl();
+
+    frame++;
 }
 
 void Pattern::render()
@@ -229,13 +250,14 @@ void Pattern::render()
         (   image,
             image->getWidth(),image->getHeight(),
             this->x-image->getWidth()/2,this->y-image->getHeight()/2,
-            1.0,
+            1.0-(frame*auto_scale),
             getBulletAngle(),
             false,
             0,0,
             Color(255,255,255,255),
             0,0,
-            true);
+            true,
+            FlatShadow());
     }
 
     if(receiver->isKeyDown(SDLK_h))
@@ -337,11 +359,14 @@ Pattern::~Pattern()
 void Pattern::hit()
 {
     bullet->playHitSound();
-    is_hit=true;
-    current_sprite=0;
-    velocity=0;
-    angle_change=0;
-    acceleration=0;
+    if(!undestructable)
+    {
+        is_hit=true;
+        current_sprite=0;
+        velocity=0;
+        angle_change=0;
+        acceleration=0;
+    }
 }
 
 bool Pattern::isHit()

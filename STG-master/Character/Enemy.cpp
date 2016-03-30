@@ -1,6 +1,6 @@
 #include "Enemy.h"
 
-Enemy::Enemy(Sound* sonido,RosalilaGraphics* painter,Receiver* receiver,std::string name,Player*player)
+Enemy::Enemy(Sound* sonido,RosalilaGraphics* painter,Receiver* receiver,std::string name,Player*player,int sound_channel_base)
 {
     //Setting up the other variables
     this->name=name;
@@ -30,6 +30,20 @@ Enemy::Enemy(Sound* sonido,RosalilaGraphics* painter,Receiver* receiver,std::str
 
     this->score_upload_message="";
     bool flag_begin_upload=false;
+
+    //Color effect
+    current_color_effect_r=255;
+    current_color_effect_g=255;
+    current_color_effect_b=255;
+    current_color_effect_a=255;
+
+    //Shake
+    current_screen_shake_x=0;
+    current_screen_shake_y=0;
+    shake_time=0;
+    shake_magnitude=0;
+
+    this->sound_channel_base=sound_channel_base;
 
     loadFromXML();
 
@@ -66,6 +80,14 @@ void Enemy::modifiersControl()
             }
             if(modifier->variable=="pattern_type")
             {
+                //Reset cooldowns
+                for(int i=0;i<type[current_type].size();i++)
+                {
+                    type[current_type][i]->current_cooldown=0;
+                    type[current_type][i]->current_startup=0;
+                    type[current_type][i]->iteration=0;
+                    type[current_type][i]->state="startup";
+                }
                 this->current_type=modifier->value;
             }
         }
@@ -80,10 +102,12 @@ void Enemy::logic(int stage_velocity, string stage_name, int global_iteration, s
     animationControl();
     spellControl(stage_velocity);
 
-    for (std::list<Pattern*>::iterator pattern = active_patterns->begin(); pattern != active_patterns->end(); pattern++) {
+    for (std::list<Pattern*>::iterator pattern = active_patterns->begin(); pattern != active_patterns->end(); pattern++)
+    {
         Pattern* p =  (Pattern*)*pattern;
-        double distance_x= player->getHitbox().getX() - p->getX();
-        double distance_y= player->getHitbox().getY() - p->getY();
+        double distance_x= player->hitboxes[0]->getX() - p->getX();
+        double distance_y= player->hitboxes[0]->getY() - p->getY();
+        //.getPlacedHitbox(this->x,this->y)
 
         if (p->getHoming() != 0)
         {
@@ -93,8 +117,6 @@ void Enemy::logic(int stage_velocity, string stage_name, int global_iteration, s
         {
             p->setAngle(p->getAngle()-atan2(distance_y,distance_x)*180/PI);
         }
-
-
     }
 
 
@@ -108,17 +130,8 @@ void Enemy::logic(int stage_velocity, string stage_name, int global_iteration, s
             if(this->sonido->soundExists(name+".destroyed"))
                 this->sonido->playSound(name+".destroyed");
 
-            this->hitbox.setValues(0,0,0,0,0);
-
-            //Delete bullets
-            std::list<Pattern*>* active_patterns=getActivePatterns();
-            std::list<Pattern*>::iterator i = active_patterns->begin();
-            while (i != active_patterns->end())
-            {
-                Pattern*p=(Pattern*)*i;
-                active_patterns->erase(i++);
-                delete p;
-            }
+            for(int i=0;i<hitboxes.size();i++)
+                this->hitboxes[i]->setValues(0,0,0,0,0);
 
 //            RosalilaNetwork network(painter);
 //            //score_upload_message = network.runTcpClientSendScore(31716, "108.59.1.187",stage_name, username, global_iteration);
@@ -132,30 +145,53 @@ void Enemy::logic(int stage_velocity, string stage_name, int global_iteration, s
     this->y -= sin (angle*PI/180) * velocity / getSlowdown();
 
     getIterateSlowdownFlag();
+
+    //Color effect
+//    if(current_color_effect_r<255)
+//        current_color_effect_r++;
+//    if(current_color_effect_g<255)
+//        current_color_effect_g++;
+//    if(current_color_effect_b<255)
+//        current_color_effect_b++;
+//    if(current_color_effect_a<255)
+//        current_color_effect_a++;
+
+
+    current_color_effect_a = (255*hp)/max_hp;
+    //current_color_effect_b = (255*hp)/max_hp;
 }
 
-void Enemy::render()
+void Enemy::bottomRender()
 {
-    painter->drawRectangle(life_bar_x+life_bar_rect_offset_x,life_bar_y+life_bar_rect_offset_y,(life_bar_rect_width*hp)/max_hp,life_bar_rect_height,0,this->color.getRed(),this->color.getGreen(),this->color.getBlue(),this->color.getAlpha(),false);
-    parrentRender();
+    Character::bottomRender();
+//    painter->drawRectangle(life_bar_x+life_bar_rect_offset_x,life_bar_y+life_bar_rect_offset_y,(life_bar_rect_width*hp)/max_hp,life_bar_rect_height,0,this->color.getRed(),this->color.getGreen(),this->color.getBlue(),this->color.getAlpha(),false);
+    //parrentRender();
+//
+//    painter->draw2DImage
+//    (   life_bar,
+//        life_bar->getWidth(),life_bar->getHeight(),
+//        painter->camera_x+life_bar_x,life_bar_y,
+//        1.0,
+//        0.0,
+//        false,
+//        0,0,
+//        Color(255,255,255,255),
+//        0,0,
+//        true,
+//        FlatShadow());
 
-    painter->draw2DImage
-    (   life_bar,
-        life_bar->getWidth(),life_bar->getHeight(),
-        painter->camera_x+life_bar_x,life_bar_y,
-        1.0,
-        0.0,
-        false,
-        0,0,
-        Color(255,255,255,255),
-        0,0,
-        true);
-    if(this->hp<=0)
-    {
-        painter->drawText("Uploading score.",0,80);
-        painter->drawText(score_upload_message,0,95);
-        flag_begin_upload = true;
-    }
+
+//    if(this->hp<=0)
+//    {
+//        painter->drawText("Uploading score.",0,80);
+//        painter->drawText(score_upload_message,0,95);
+//        flag_begin_upload = true;
+//    }
+}
+
+void Enemy::topRender()
+{
+    Character::topRender();
 }
 
 void Enemy::loadModifiersFromXML()

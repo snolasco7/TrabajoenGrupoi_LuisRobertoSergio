@@ -20,10 +20,14 @@ class STG
     Enemy*enemy;
     Stage*stage;
 
+    string game_mode;
+
     string username;
 
     Animation you_win,you_loose;
     int iteration;
+    int boss_fury_level;
+
 
     bool isOutOfBounds(int pos_x,int pos_y);
     void mainLoop();
@@ -32,7 +36,10 @@ class STG
     void deletePatterns();
     void checkCharacterOutOfBounds();
 public:
-    STG(Sound* sonido,RosalilaGraphics* painter,Receiver* receiver,Player*player,Enemy*enemy,Stage*stage);
+    bool playerWon();
+    bool enemyWon();
+    void stageSelectModeInit();
+    STG(Sound* sonido,RosalilaGraphics* painter,Receiver* receiver,Player*player,Enemy*enemy,Stage*stage,string game_mode);
 };
 
 #endif

@@ -30,7 +30,6 @@ protected:
     bool visible;
 
     int velocity;
-    Hitbox hitbox;
     bool shooting;
     std::string orientation;
     std::string current_type;
@@ -57,34 +56,66 @@ protected:
     std::map<std::string, std::vector<Pattern*> > type;
     std::list<Pattern*>* active_patterns;
 
+    //Color effect
+    int current_color_effect_r;
+    int current_color_effect_g;
+    int current_color_effect_b;
+    int current_color_effect_a;
+
+    //Shake
+    int current_screen_shake_x;
+    int current_screen_shake_y;
+    int shake_time;
+    int shake_magnitude;
+
+    int sound_channel_base;
+
 public:
+    vector<Hitbox*> hitboxes;
+
+    Image* flat_shadow_texture;
+    vector<Point*>shadow_align_points_left;
+    vector<Point*>shadow_align_points_right;
+    vector<Point*>shadow_align_points_top;
+
+    vector<Point*>inbetween_shadow_align_points_left;
+    vector<Point*>inbetween_shadow_align_points_right;
+    vector<Point*>inbetween_shadow_align_points_top;
 
 double x,y;
     Character(){}
-    Character(Sound* sonido,RosalilaGraphics* painter,Receiver* receiver,std::string name);
+    Character(Sound* sonido,RosalilaGraphics* painter,Receiver* receiver,std::string name,int sound_channel_base);
+    ~Character();
     void loadFromXML();
     void loadMainXML();
     void loadBulletsXML();
     void loadPatternsXML();
+    vector<Modifier*>* loadModifierXML(TiXmlNode* modifier_node);
+    Pattern* loadPatternXML(TiXmlNode* pattern_node);
     void logic(int stage_velocity);
     //logic sub functions
     void animationControl();
     void spellControl(int stage_velocity);
     virtual void addActivePattern(Pattern* pattern);
 
-    void parrentRender();
-    void render();
+    void bottomRender();
+    void topRender();
     void setX(int x);
     void setY(int y);
     int getX();
     int getY();
     int getHP();
+    string getName();
+    void setHP(int hp);
+    void setVisible(bool visible);
+    void setOrientation(string orientation);
     int getIteration();
-    Hitbox getHitbox();
-    void setType(std::string type);
+    void setType(std::string new_current_type);
     std::list<Pattern*>* getActivePatterns();
     bool collides(Hitbox hitbox,int hitbox_x,int hitbox_y,float hitbox_angle);
     void hit(int damage);
+    void shakeScreen(int shake_magnitude, int shake_time);
+    void deleteActivePatterns();
 };
 
 #endif
